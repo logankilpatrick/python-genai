@@ -170,6 +170,48 @@ test_table: list[pytest_helper.TestTableItem] = [
         ),
         exception_if_mldev='400',
     ),
+    pytest_helper.TestTableItem(
+        name='test_google_search_tool',
+        parameters=types._GenerateContentParameters(
+            model='gemini-2.0-flash-exp',
+            contents=t.t_contents(None, 'Why is the sky blue?'),
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())]
+            ),
+        ),
+    ),
+    pytest_helper.TestTableItem(
+        name='test_speech_with_config',
+        parameters=types._GenerateContentParameters(
+            model='gemini-2.0-flash-exp',
+            contents=t.t_contents(
+                None, 'Produce a speech response saying "Cheese"'
+            ),
+            config=types.GenerateContentConfig(
+                response_modalities=['audio'],
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name='charon'
+                        )
+                        )
+                    )
+                ),
+        ),
+        exception_if_vertex='400',
+    ),
+    pytest_helper.TestTableItem(
+        name='test_union_speech_string_config',
+        parameters=types._GenerateContentParameters(
+            model='gemini-2.0-flash-exp',
+            contents='Say hello!',
+            config=types.GenerateContentConfig(
+                response_modalities=['audio'], speech_config='charon'
+            ),
+        ),
+        exception_if_vertex='400',
+        has_union=True,
+    ),
 ]
 
 pytestmark = pytest_helper.setup(
@@ -402,6 +444,60 @@ def test_json_schema(client):
       },
   )
   assert isinstance(response.parsed, dict)
+
+
+def test_json_schema_with_streaming(client):
+
+  response = client.models.generate_content_stream(
+      model='gemini-2.0-flash-exp',
+      contents='Give me information of the United States.',
+      config={
+          'response_mime_type': 'application/json',
+          'response_schema': {
+              'properties': {
+                  'name': {'type': 'STRING'},
+                  'population': {'type': 'INTEGER'},
+                  'capital': {'type': 'STRING'},
+                  'continent': {'type': 'STRING'},
+                  'gdp': {'type': 'INTEGER'},
+                  'official_language': {'type': 'STRING'},
+                  'total_area_sq_mi': {'type': 'INTEGER'},
+              },
+              'type': 'OBJECT',
+          },
+      },
+  )
+
+  for r in response:
+    parts = r.candidates[0].content.parts
+    for p in parts:
+      print(p.text)
+
+
+def test_pydantic_schema_with_streaming(client):
+
+  class CountryInfo(BaseModel):
+    name: str
+    population: int
+    capital: str
+    continent: str
+    gdp: int
+    official_language: str
+    total_area_sq_mi: int
+
+  response = client.models.generate_content_stream(
+      model='gemini-2.0-flash-exp',
+      contents='Give me information of the United States.',
+      config={
+          'response_mime_type': 'application/json',
+          'response_schema': CountryInfo
+      },
+  )
+
+  for r in response:
+    parts = r.candidates[0].content.parts
+    for p in parts:
+      print(p.text)
 
 
 def test_function(client):

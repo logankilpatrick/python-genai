@@ -178,7 +178,12 @@ the model.
 The following example shows how to do it for a simple function invocation.
 
 ``` python
-function_call_part = response.candidates[0].content.parts[0]
+user_prompt_content = types.Content(
+    role="user", parts=[types.Part.from_text("What is the weather like in Boston?")]
+)
+function_call_content = response.candidates[0].content
+function_call_part = function_call_content.parts[0]
+
 
 try:
   function_result = get_current_weather(**function_call_part.function_call.args)
@@ -191,16 +196,22 @@ function_response_part = types.Part.from_function_response(
     name=function_call_part.function_call.name,
     response=function_response,
 )
+function_response_content = types.Content(role="tool", parts=[function_response_part])
+
 
 response = client.models.generate_content(
     model='gemini-2.0-flash-exp',
     contents=[
-        types.Part.from_text("What is the weather like in Boston?"),
-        function_call_part,
-        function_response_part,
-    ])
+        user_prompt_content,
+        function_call_content,
+        function_response_content,
+    ],
+    config=types.GenerateContentConfig(
+        tools=[tool],
+    ),
+)
 
-response
+print(response.text)
 ```
 
 ### JSON Response Schema
@@ -407,10 +418,10 @@ response1 = client.models.generate_image(
     model='imagen-3.0-generate-001',
     prompt='An umbrella in the foreground, and a rainy night sky in the background',
     config=types.GenerateImageConfig(
-        negative_prompt= "human",
+        negative_prompt= 'human',
         number_of_images= 1,
         include_rai_reason= True,
-        output_mime_type= "image/jpeg"
+        output_mime_type= 'image/jpeg'
     )
 )
 response1.generated_images[0].image.show()
@@ -425,7 +436,11 @@ Upscale image is not supported in Google AI.
 response2 = client.models.upscale_image(
     model='imagen-3.0-generate-001',
     image=response1.generated_images[0].image,
-    config=types.UpscaleImageConfig(upscale_factor="x2")
+    upscale_factor='x2',
+    config=types.UpscaleImageConfig(
+        include_rai_reason= True,
+        output_mime_type= 'image/jpeg',
+    ),
 )
 response2.generated_images[0].image.show()
 ```
@@ -466,6 +481,42 @@ response3 = client.models.edit_image(
     ),
 )
 response3.generated_images[0].image.show()
+```
+
+## Chats
+
+Create a chat session to start a multi-turn conversations with the model.
+
+### Send Message
+
+```python
+chat = client.chats.create(model='gemini-2.0-flash-exp')
+response = chat.send_message('tell me a story')
+print(response.text)
+```
+
+### Streaming
+
+```python
+chat = client.chats.create(model='gemini-2.0-flash-exp')
+for chunk in chat.send_message_stream('tell me a story'):
+  print(chunk.text)
+```
+
+### Async
+
+```python
+chat = client.aio.chats.create(model='gemini-2.0-flash-exp')
+response = await chat.send_message('tell me a story')
+print(response.text)
+```
+
+### Async Streaming
+
+```python
+chat = client.aio.chats.create(model='gemini-2.0-flash-exp')
+async for chunk in chat.send_message_stream('tell me a story'):
+  print(chunk.text)
 ```
 
 ## Files (Only Google AI)
@@ -510,19 +561,19 @@ else:
 
 cached_content = client.caches.create(
       model='gemini-1.5-pro-002',
-      contents=[
-          types.Content(
-              role='user',
-              parts=[
-                types.Part.from_uri(
-                    file_uri=file_uris[0],
-                    mime_type='application/pdf'),
-                types.Part.from_uri(
-                    file_uri=file_uris[1],
-                    mime_type='application/pdf',)])
-      ],
-      system_instruction='What is the sum of the two pdfs?',
       config=types.CreateCachedContentConfig(
+          contents=[
+              types.Content(
+                  role='user',
+                  parts=[
+                    types.Part.from_uri(
+                        file_uri=file_uris[0],
+                        mime_type='application/pdf'),
+                    types.Part.from_uri(
+                        file_uri=file_uris[1],
+                        mime_type='application/pdf',)])
+          ],
+          system_instruction='What is the sum of the two pdfs?',
           display_name='test cache',
           ttl='3600s',
       ),
